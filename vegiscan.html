@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VegiScan – Vegetable Detector</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a1a0f; --surface: #0f2318; --card: #132b1a;
+      --accent: #4ade80; --accent-dim: #22c55e;
+      --accent-glow: rgba(74,222,128,0.15);
+      --text: #e2f5e8; --muted: #6b9e78;
+      --border: rgba(74,222,128,0.2); --error: #f87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh; display: flex;
+      flex-direction: column; align-items: center;
+      padding: 40px 20px 60px;
+    }
+    .header { text-align: center; margin-bottom: 48px; }
+    .header .icon { font-size: 48px; margin-bottom: 8px; }
+    .header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 900;
+      color: var(--accent); letter-spacing: -0.02em;
+      text-shadow: 0 0 40px var(--accent-glow);
+    }
+    .header p { color: var(--muted); margin-top: 8px; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; }
+    .card {
+      width: 100%; max-width: 560px; background: var(--card);
+      border: 1px solid var(--border); border-radius: 24px;
+      padding: 32px; box-shadow: 0 20px 80px rgba(0,0,0,0.5);
+    }
+    .upload-zone {
+      border: 2px dashed var(--border); border-radius: 16px;
+      padding: 52px 24px; text-align: center; cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .upload-zone:hover, .upload-zone.dragging {
+      border-color: var(--accent-dim); background: rgba(74,222,128,0.05);
+    }
+    .upload-zone .upload-icon { font-size: 40px; margin-bottom: 12px; }
+    .upload-zone h3 { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+    .upload-zone p { font-size: 13px; color: var(--muted); }
+    .preview-wrap { position: relative; display: none; }
+    .preview-wrap img {
+      width: 100%; border-radius: 14px; max-height: 300px;
+      object-fit: cover; display: block; border: 1px solid var(--border);
+    }
+    .remove-btn {
+      position: absolute; top: 10px; right: 10px;
+      background: rgba(10,26,15,0.85); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--muted); padding: 4px 10px;
+      font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif;
+      transition: color 0.2s;
+    }
+    .remove-btn:hover { color: var(--accent); }
+    .detect-btn {
+      margin-top: 20px; width: 100%; padding: 14px;
+      background: var(--accent); color: #0a1a0f; border: none;
+      border-radius: 12px; font-size: 15px; font-weight: 600;
+      font-family: 'DM Sans', sans-serif; cursor: pointer;
+      transition: all 0.2s ease; letter-spacing: 0.04em;
+      display: none; align-items: center; justify-content: center; gap: 8px;
+    }
+    .detect-btn:hover:not(:disabled) {
+      background: var(--accent-dim); transform: translateY(-1px);
+      box-shadow: 0 8px 30px rgba(74,222,128,0.35);
+    }
+    .detect-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(10,26,15,0.3); border-top-color: #0a1a0f;
+      border-radius: 50%; animation: spin 0.7s linear infinite; display: none;
+    }
+    .error-box {
+      margin-top: 16px; padding: 12px 16px;
+      background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3);
+      border-radius: 10px; color: var(--error); font-size: 14px; display: none;
+    }
+    .result-box { margin-top: 24px; display: none; }
+    .result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .result-name-wrap { display: flex; align-items: center; gap: 10px; }
+    .result-emoji { font-size: 32px; }
+    .result-name { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--accent); text-transform: capitalize; }
+    .confidence-badge {
+      background: var(--accent-glow); border: 1px solid var(--border);
+      border-radius: 20px; padding: 4px 12px; font-size: 12px;
+      color: var(--accent); font-weight: 600; white-space: nowrap;
+    }
+    .bar-wrap { margin-top: 16px; }
+    .bar-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 4px; text-transform: capitalize; }
+    .bar-bg { background: var(--surface); border-radius: 99px; height: 8px; overflow: hidden; margin-bottom: 10px; }
+    .bar-fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.6s ease; }
+    .no-veg-box {
+      text-align: center; padding: 24px 16px; background: var(--surface);
+      border-radius: 14px; border: 1px solid rgba(248,113,113,0.2);
+    }
+    .no-veg-box .no-veg-icon { font-size: 36px; margin-bottom: 10px; }
+    .no-veg-box h3 { font-family: 'Playfair Display', serif; color: var(--error); font-size: 18px; margin-bottom: 8px; }
+    .no-veg-box p { font-size: 14px; color: var(--muted); }
+    .try-again-btn {
+      margin-top: 20px; width: 100%; padding: 11px;
+      background: transparent; border: 1px solid var(--border);
+      border-radius: 10px; color: var(--muted); font-size: 13px;
+      cursor: pointer; font-family: 'DM Sans', sans-serif; transition: color 0.2s;
+    }
+    .try-again-btn:hover { color: var(--accent); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="icon">🥦</div>
+    <h1>VegiScan</h1>
+    <p>AI-Powered Vegetable Detection</p>
+  </div>
+
+  <div class="card">
+    <div class="upload-zone" id="uploadZone">
+      <div class="upload-icon">📷</div>
+      <h3>Drop an image here</h3>
+      <p>or click to browse — JPG, PNG, WEBP</p>
+      <input type="file" id="fileInput" accept="image/*" style="display:none"/>
+    </div>
+
+    <div class="preview-wrap" id="previewWrap">
+      <img id="previewImg" src="" alt="Uploaded"/>
+      <button class="remove-btn" id="removeBtn">✕ Remove</button>
+    </div>
+
+    <button class="detect-btn" id="detectBtn">
+      <div class="spinner" id="spinner"></div>
+      <span id="btnText">🔍 Detect Vegetable</span>
+    </button>
+
+    <div class="error-box" id="errorBox"></div>
+    <div class="result-box" id="resultBox"></div>
+  </div>
+
+  <script>
+    const uploadZone  = document.getElementById('uploadZone');
+    const fileInput   = document.getElementById('fileInput');
+    const previewWrap = document.getElementById('previewWrap');
+    const previewImg  = document.getElementById('previewImg');
+    const removeBtn   = document.getElementById('removeBtn');
+    const detectBtn   = document.getElementById('detectBtn');
+    const spinner     = document.getElementById('spinner');
+    const btnText     = document.getElementById('btnText');
+    const errorBox    = document.getElementById('errorBox');
+    const resultBox   = document.getElementById('resultBox');
+
+    let imageBase64 = null;
+
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragging'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragging'));
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault(); uploadZone.classList.remove('dragging');
+      processFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => processFile(fileInput.files[0]));
+    removeBtn.addEventListener('click', reset);
+    detectBtn.addEventListener('click', detect);
+
+    function processFile(file) {
+      if (!file || !file.type.startsWith('image/')) { showError('Please upload a valid image file.'); return; }
+      clearError(); clearResult();
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        imageBase64 = e.target.result.split(',')[1];
+        previewImg.src = e.target.result;
+        uploadZone.style.display = 'none';
+        previewWrap.style.display = 'block';
+        detectBtn.style.display = 'flex';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function detect() {
+      if (!imageBase64) return;
+      setLoading(true); clearError(); clearResult();
+      try {
+        const res = await fetch('/api/detect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: imageBase64 })
+        });
+        const data = await res.json();
+        if (data.error) { showError(data.error); return; }
+        renderResult(data);
+      } catch (err) {
+        showError('Detection failed. Make sure the server is running.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function renderResult(data) {
+      resultBox.style.display = 'block';
+
+      if (data.not_sure) {
+        resultBox.innerHTML = `
+          <div class="no-veg-box">
+            <div class="no-veg-icon">🤔</div>
+            <h3>Not Sure</h3>
+            <p>${data.message}</p>
+            <p style="margin-top:8px;font-size:12px;color:var(--muted)">Confidence: ${data.confidence_score}%</p>
+          </div>
+          <button class="try-again-btn" onclick="reset()">↩ Try Another Image</button>
+        `;
+        return;
+      }
+
+      const bars = data.top3.map(p => `
+        <div class="bar-label"><span>${p.name}</span><span>${(p.confidence*100).toFixed(1)}%</span></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${(p.confidence*100).toFixed(1)}%"></div></div>
+      `).join('');
+
+      resultBox.innerHTML = `
+        <div class="result-header">
+          <div class="result-name-wrap">
+            <span class="result-emoji">${data.emoji}</span>
+            <div><div class="result-name">${data.name}</div></div>
+          </div>
+          <span class="confidence-badge">${data.confidence} · ${data.confidence_score}%</span>
+        </div>
+        <div class="bar-wrap">${bars}</div>
+        <button class="try-again-btn" onclick="reset()">↩ Try Another Image</button>
+      `;
+    }
+
+    function reset() {
+      imageBase64 = null; previewImg.src = ''; fileInput.value = '';
+      uploadZone.style.display = ''; previewWrap.style.display = 'none';
+      detectBtn.style.display = 'none'; clearError(); clearResult();
+    }
+
+    function setLoading(on) {
+      detectBtn.disabled = on;
+      spinner.style.display = on ? 'block' : 'none';
+      btnText.textContent = on ? 'Analyzing...' : '🔍 Detect Vegetable';
+    }
+
+    function showError(msg) { errorBox.textContent = msg; errorBox.style.display = 'block'; }
+    function clearError() { errorBox.textContent = ''; errorBox.style.display = 'none'; }
+    function clearResult() { resultBox.innerHTML = ''; resultBox.style.display = 'none'; }
+  </script>
+</body>
+</html>
